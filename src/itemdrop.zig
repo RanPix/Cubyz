@@ -15,6 +15,7 @@ const main = @import("main");
 const random = @import("random.zig");
 const settings = @import("settings.zig");
 const utils = @import("utils.zig");
+const animation = @import("animation.zig");
 const vec = @import("vec.zig");
 const Mat4f = vec.Mat4f;
 const Vec3d = vec.Vec3d;
@@ -519,12 +520,13 @@ pub const ClientItemDropManager = struct { // MARK: ClientItemDropManager
 	}
 };
 
-// Going to handle item animations and other things like - bobbing, interpolation, movement reactions
 pub const ItemDisplayManager = struct { // MARK: ItemDisplayManager
 	pub var showItem: bool = true;
 	var cameraFollow: Vec3f = @splat(0);
 	var cameraFollowVel: Vec3f = @splat(0);
 	const damping: Vec3f = @splat(130);
+
+	pub var anim = animation.Animation{};
 
 	pub fn update(deltaTime: f64) void {
 		if(deltaTime == 0) return;
@@ -537,6 +539,8 @@ pub const ItemDisplayManager = struct { // MARK: ItemDisplayManager
 		const n1: Vec3f = cameraFollowVel - (cameraFollow - playerVel)*damping*damping*@as(Vec3f, @splat(dt));
 		const n2: Vec3f = @as(Vec3f, @splat(1)) + damping*@as(Vec3f, @splat(dt));
 		cameraFollowVel = n1/(n2*n2);
+
+		anim.update(deltaTime);
 
 		cameraFollow += cameraFollowVel*@as(Vec3f, @splat(dt));
 	}
@@ -827,7 +831,10 @@ pub const ItemDropRenderer = struct { // MARK: ItemDropRenderer
 				scale = 0.57;
 				pos = Vec3d{0.4, 0.65, -0.3};
 			}
+			pos += ItemDisplayManager.anim.getPosition();
 			bindModelUniforms(model.index, blockType);
+
+			const animatedRotation: Vec3f = @floatCast(ItemDisplayManager.anim.getRotation());
 
 			var modelMatrix = Mat4f.rotationZ(-rot[2]);
 			modelMatrix = modelMatrix.mul(Mat4f.rotationY(-rot[1]));
@@ -843,6 +850,9 @@ pub const ItemDropRenderer = struct { // MARK: ItemDropRenderer
 			} else {
 				modelMatrix = modelMatrix.mul(Mat4f.rotationZ(-std.math.pi*0.2));
 			}
+			modelMatrix = modelMatrix.mul(Mat4f.rotationX(animatedRotation[0]));
+			modelMatrix = modelMatrix.mul(Mat4f.rotationY(animatedRotation[1]));
+			modelMatrix = modelMatrix.mul(Mat4f.rotationZ(animatedRotation[2]));
 			modelMatrix = modelMatrix.mul(Mat4f.scale(@splat(scale)));
 			modelMatrix = modelMatrix.mul(Mat4f.translation(@splat(-0.5)));
 			drawItem(vertices, modelMatrix);
