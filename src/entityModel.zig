@@ -15,6 +15,8 @@ const Vec3d = vec.Vec3d;
 const Vec3f = vec.Vec3f;
 const Vec4f = vec.Vec4f;
 const NeverFailingAllocator = main.heap.NeverFailingAllocator;
+const animation = main.animation;
+const Animation = animation.Animation;
 
 const BinaryReader = main.utils.BinaryReader;
 
@@ -179,6 +181,7 @@ pub const EntityModel = struct {
 		if (result != gltf.cgltf_result_success) {
 			std.log.err("GLTF Parse error: {s}", .{@errorName(getGltfError(result))});
 			return getGltfError(result);
+
 		}
 
 		defer gltf.cgltf_free(@ptrCast(data));
@@ -288,6 +291,85 @@ pub const EntityModel = struct {
 
 					vertSlice[v].nodeID = @intCast(parentNodeID);
 				}
+			}
+		}
+
+		std.debug.print("count: {d}\n", .{data.animations_count});
+		for(data.animations, 0..data.animations_count) |animData, _| {
+			std.debug.print("ANIM name: \"{s}\" samplerCount: {d} channelCount: {d}\n", .{animData.name, animData.samplers_count, animData.channels_count});
+
+			var anim: Animation = .{};
+			for(animData.channels, 0..animData.channels_count) |channel, _| {
+				const t = switch(channel.target_path) {
+					0 => "animation_path_type_invalid",
+					1 => "animation_path_type_translation",
+					2 => "animation_path_type_rotation",
+					3 => "animation_path_type_scale",
+					4 => "animation_path_type_weights",
+					5 => "animation_path_type_max_enum",
+					else => unreachable,
+				};
+				std.debug.print("node: {s} target: {s}\n", .{channel.target_node[0].name, t});
+				// for (channel.extras) |value| {}
+				const sampler = channel.sampler.*;
+				const l = switch(sampler.interpolation) {
+					0 => "interpolation_type_linear",
+					1 => "interpolation_type_step",
+					2 => "interpolation_type_cubic_spline",
+					3 => "interpolation_type_max_enum",
+					else => unreachable,
+				};
+
+				anim.length = @max(anim.length, sampler.input.*.max[0]);
+				const timestampsBV = sampler.input[0].buffer_view[0];
+				const valuesBV = sampler.output[0].buffer_view[0];
+
+				std.debug.print("      lerp: \"{s}\"   data size: {d}\n", .{l, valuesBV.buffer[0].size});
+				std.debug.print("      vals - offset: {d}   size: {d}   stride: {d}\n", .{valuesBV.offset, valuesBV.size, sampler.output.*.stride});
+				var kfTimestamps: []u8 = undefined;
+				var kfValues: []u8 = undefined;
+				if(valuesBV.buffer[0].data) |da| {
+					kfValues = @as([]u8, @ptrCast(da));
+					kfValues.len = valuesBV.buffer[0].size;
+					kfValues = kfValues[valuesBV.offset .. valuesBV.offset + valuesBV.size];
+
+					kfTimestamps = @as([]u8, @ptrCast(da));
+					kfTimestamps.len = timestampsBV.buffer[0].size;
+					kfTimestamps = kfTimestamps[timestampsBV.offset .. timestampsBV.offset + timestampsBV.size];
+					const timestamps: []f32 = @alignCast(@ptrCast(kfTimestamps));
+					switch(channel.target_path) {
+						gltf.cgltf_animation_path_type_rotation => {
+							var rotations: [][4]f32 = @alignCast(@ptrCast(kfValues));
+							rotations.len = @divFloor(valuesBV.size, @sizeOf(f32)*4);
+							const quats = main.stackAllocator.alloc(Vec4f, rotations.len);
+							defer main.stackAllocator.free(quats);
+							for(quats, 0..) |*v, i| {
+								const r = rotations[i];
+								v.* = .{-r[1], -r[2], -r[3], r[0]};
+								std.debug.print("         time: {d}    rot: {d}\n", .{timestamps[i], v.*});
+							}
+							anim.rotationTimeline = .init(timestamps, quats);
+						},
+						gltf.cgltf_animation_path_type_translation => {
+							var positions: []const [3]f32 = @alignCast(@ptrCast(kfValues));
+							positions.len = @divFloor(valuesBV.size, @sizeOf(f32)*3);
+							const posits = main.stackAllocator.alloc(Vec3d, positions.len);
+							defer main.stackAllocator.free(posits);
+							for(posits, 0..) |*v, i| {
+								const r = positions[i];
+								v.* = @floatCast(Vec3f{-r[0], r[2], r[1]});
+								std.debug.print("         time: {d}    rot: {d}\n", .{timestamps[i], v.*});
+							}
+							anim.positionTimeline = .init(timestamps, posits);
+						},
+						gltf.cgltf_animation_path_type_scale => {
+
+						},
+						else => unreachable,
+					}
+				}
+				animationHashMap.put(main.globalArena.allocator, std.mem.span(animData.name), @intCast(animationTypes.items.len)) catch unreachable;
+				animationTypes.append(main.globalArena, anim);
 			}
 		}
 

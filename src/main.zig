@@ -4,6 +4,7 @@ const builtin = @import("builtin");
 pub const gui = @import("gui/gui.zig");
 pub const server = @import("server/server.zig");
 
+pub const animation = @import("animation.zig");
 pub const audio = @import("audio.zig");
 pub const assets = @import("assets.zig");
 pub const block_entity = @import("block_entity.zig");
