@@ -133,7 +133,7 @@ pub const EntityModel = struct {
 				const mod = split.first();
 				const textureName = split.next() orelse unreachable;
 				self.texturePath = std.fmt.allocPrint(main.worldArena.allocator, "{s}/{s}/entityModels/textures/{s}{s}", .{assetFolder, mod, textureName, fileEnding}) catch unreachable;
-				main.files.cubyzDir().dir.access(self.texturePath, .{}) catch {
+				main.files.cubyzDir().dir.access(main.io, self.texturePath, .{}) catch {
 					main.worldArena.free(self.texturePath);
 					self.texturePath = std.fmt.allocPrint(main.worldArena.allocator, "assets/{s}/entityModels/textures/{s}{s}", .{mod, textureName, fileEnding}) catch unreachable;
 				};
