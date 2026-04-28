@@ -12,8 +12,21 @@ pub const Animation = struct {
 
 	samplers: []Sampler,
 
-	const Sampler = struct {
+	fn Sampler(T: type, affectedNode: u8) type {
+		return struct {
+			data: T,
+			affectedNode: u8,
+
+			currentFrameTime: f64 = 0,
+			currentFrame: u32 = 0,
+
+			frames: []Frame,
+		};
+	}
+
+	const Samplerw = struct {
 		T: type,
+		data: type,
 		affectedNode: u8,
 		
 		currentFrameTime: f64 = 0,
@@ -22,10 +35,9 @@ pub const Animation = struct {
 		frames: []Frame = undefined,
 
 		pub fn init(T: type, affectedNode: u8) Sampler {
-			// std.builtin.Type
-			if ((@typeInfo(T) != .Vector and @typeInfo(T).vector.child != .Float) or @typeInfo(T) != .Float) {
-				return;
-			}
+			comptime if ((@typeInfo(T) != .Vector and @typeInfo(T).vector.child != .Float) or @typeInfo(T) != .Float) {
+				@compileError("Can only use floats or float vectors for samplers");
+			};
 
 			return .{
 				.T = T,
